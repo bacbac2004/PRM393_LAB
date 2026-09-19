@@ -21,7 +21,7 @@ class MyApp extends StatelessWidget {
               SizedBox(height: 20),
               Text(
                 'Welcome to Nguyễn Xuân Bắc!',
-                style: TextStyle(fontSize: 26, fontWeight: FontWeight.bold),
+                style: TextStyle(fontSize: 26, fontWeight: FontWeight.w900,color:Colors.red),
               ),
               SizedBox(height: 10),
               Text(
