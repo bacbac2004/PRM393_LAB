@@ -1,20 +1,14 @@
 
+import 'dart:convert';
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 
-void main() => runApp(const MyApp());
-
-class MyApp extends StatelessWidget {
-  const MyApp({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return MaterialApp(
-      debugShowCheckedModeBanner: false,
-      title: 'Mock Login',
-      theme: ThemeData(colorSchemeSeed: Colors.blue),
-      home: const LoginPage(),
-    );
-  }
+void main() {
+  runApp(const MaterialApp(
+    debugShowCheckedModeBanner: false,
+    home: LoginPage(),
+  ));
 }
 
 class LoginPage extends StatefulWidget {
@@ -25,47 +19,83 @@ class LoginPage extends StatefulWidget {
 }
 
 class _LoginPageState extends State<LoginPage> {
-  final formKey = GlobalKey<FormState>();
-  final emailController = TextEditingController();
+  final usernameController = TextEditingController();
   final passwordController = TextEditingController();
 
   bool loading = false;
-  String? error;
+  String message = '';
 
   Future<void> login() async {
-    if (!formKey.currentState!.validate()) return;
+    final username = usernameController.text.trim();
+    final password = passwordController.text;
+
+    if (username.isEmpty || password.isEmpty) {
+      setState(() => message = 'Vui lòng nhập đầy đủ thông tin');
+      return;
+    }
 
     setState(() {
       loading = true;
-      error = null;
+      message = '';
     });
 
-    // Giả lập gọi backend
-    await Future.delayed(const Duration(seconds: 2));
+    HttpClient? client;
 
-    if (!mounted) return;
+    try {
+      client = HttpClient();
 
-    if (emailController.text.trim() == 'student@example.com' &&
-        passwordController.text == '123456') {
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(
-          builder: (_) => HomePage(
-            email: emailController.text.trim(),
-          ),
-        ),
+      final request = await client.postUrl(
+        Uri.parse('https://dummyjson.com/auth/login'),
       );
-    } else {
+
+      request.headers.contentType = ContentType.json;
+
+      request.write(jsonEncode({
+        'username': username,
+        'password': password,
+        'expiresInMins': 30,
+      }));
+
+      final response = await request.close();
+      final body = await response.transform(utf8.decoder).join();
+      final data = jsonDecode(body) as Map<String, dynamic>;
+
+      if (!mounted) return;
+
+      if (response.statusCode == 200) {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (_) => HomePage(
+              name: data['firstName']?.toString() ?? username,
+              token: data['accessToken']?.toString() ?? '',
+            ),
+          ),
+        );
+      } else {
+        setState(() {
+          message = data['message']?.toString()
+              ?? 'Đăng nhập thất bại';
+        });
+      }
+    } catch (e) {
+      if (!mounted) return;
+
       setState(() {
-        error = 'Email hoặc mật khẩu không đúng';
-        loading = false;
+        message = 'Không kết nối được máy chủ. Hãy thử lại.';
       });
+    } finally {
+      client?.close(force: true);
+
+      if (mounted) {
+        setState(() => loading = false);
+      }
     }
   }
 
   @override
   void dispose() {
-    emailController.dispose();
+    usernameController.dispose();
     passwordController.dispose();
     super.dispose();
   }
@@ -73,71 +103,55 @@ class _LoginPageState extends State<LoginPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Lab 10.1 - Mock Login')),
+      appBar: AppBar(title: const Text('Lab 10.2 - API Login')),
       body: Center(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(24),
-          child: Form(
-            key: formKey,
-            child: Column(
-              children: [
-                const Icon(Icons.lock, size: 80, color: Colors.blue),
-                const SizedBox(height: 24),
-                TextFormField(
-                  controller: emailController,
-                  decoration: const InputDecoration(
-                    labelText: 'Email',
-                    border: OutlineInputBorder(),
-                  ),
-                  keyboardType: TextInputType.emailAddress,
-                  validator: (value) {
-                    if (value == null || value.trim().isEmpty) {
-                      return 'Vui lòng nhập email';
-                    }
-                    if (!value.contains('@')) return 'Email không hợp lệ';
-                    return null;
-                  },
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(
+                Icons.account_circle,
+                size: 80,
+                color: Colors.blue,
+              ),
+              const SizedBox(height: 24),
+              TextField(
+                controller: usernameController,
+                decoration: const InputDecoration(
+                  labelText: 'Username',
+                  border: OutlineInputBorder(),
+                  prefixIcon: Icon(Icons.person),
                 ),
-                const SizedBox(height: 16),
-                TextFormField(
-                  controller: passwordController,
-                  decoration: const InputDecoration(
-                    labelText: 'Mật khẩu',
-                    border: OutlineInputBorder(),
-                  ),
-                  obscureText: true,
-                  validator: (value) {
-                    if (value == null || value.isEmpty) {
-                      return 'Vui lòng nhập mật khẩu';
-                    }
-                    if (value.length < 6) {
-                      return 'Mật khẩu cần ít nhất 6 ký tự';
-                    }
-                    return null;
-                  },
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: passwordController,
+                obscureText: true,
+                decoration: const InputDecoration(
+                  labelText: 'Password',
+                  border: OutlineInputBorder(),
+                  prefixIcon: Icon(Icons.lock),
                 ),
-                const SizedBox(height: 16),
-                if (error != null)
-                  Text(error!, style: const TextStyle(color: Colors.red)),
-                const SizedBox(height: 12),
-                SizedBox(
-                  width: double.infinity,
-                  child: FilledButton(
-                    onPressed: loading ? null : login,
-                    child: loading
-                        ? const CircularProgressIndicator()
-                        : const Text('Đăng nhập'),
-                  ),
-                ),
-                const SizedBox(height: 16),
-                const Text(
-                  'Tài khoản thử nghiệm:\n'
-                      'student@example.com\n'
-                      'Mật khẩu: 123456',
+              ),
+              const SizedBox(height: 16),
+              if (message.isNotEmpty)
+                Text(
+                  message,
+                  style: const TextStyle(color: Colors.red),
                   textAlign: TextAlign.center,
                 ),
-              ],
-            ),
+              const SizedBox(height: 20),
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton(
+                  onPressed: loading ? null : login,
+                  child: loading
+                      ? const CircularProgressIndicator()
+                      : const Text('ĐĂNG NHẬP'),
+                ),
+              ),
+            ],
           ),
         ),
       ),
@@ -146,35 +160,57 @@ class _LoginPageState extends State<LoginPage> {
 }
 
 class HomePage extends StatelessWidget {
-  final String email;
+  final String name;
+  final String token;
 
-  const HomePage({super.key, required this.email});
+  const HomePage({
+    super.key,
+    required this.name,
+    required this.token,
+  });
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Home')),
+      appBar: AppBar(title: const Text('Trang chủ')),
       body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Icon(Icons.check_circle, size: 80, color: Colors.green),
-            const SizedBox(height: 16),
-            Text('Đăng nhập thành công!\n$email',
-                textAlign: TextAlign.center),
-            const SizedBox(height: 20),
-            FilledButton(
-              onPressed: () {
-                Navigator.pushReplacement(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => const LoginPage(),
-                  ),
-                );
-              },
-              child: const Text('Đăng xuất'),
-            ),
-          ],
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(
+                Icons.verified_user,
+                size: 70,
+                color: Colors.green,
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'Xin chào, $name!',
+                style: const TextStyle(fontSize: 24),
+              ),
+              const SizedBox(height: 12),
+              const Text('Đăng nhập API thành công!'),
+              const SizedBox(height: 12),
+              const Text('Access Token:'),
+              SelectableText(
+                token.isEmpty ? 'Không có token' : token,
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 20),
+              FilledButton(
+                onPressed: () {
+                  Navigator.pushReplacement(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const LoginPage(),
+                    ),
+                  );
+                },
+                child: const Text('Đăng xuất'),
+              ),
+            ],
+          ),
         ),
       ),
     );
